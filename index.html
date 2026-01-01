@@ -548,21 +548,30 @@
         }
 
         function showDashboard() {
-            document.getElementById('loginPage').style.display = 'none';
-            document.getElementById('appShell').classList.remove('hidden');
-            document.getElementById('headerUsername').textContent = currentUser.displayName;
-            document.getElementById('headerUserRole').textContent = currentUser.isAdmin ? 'Administrator' : 'Team Member';
-            document.getElementById('settingsCurrentUser').textContent = currentUser.displayName;
-            document.getElementById('settingsCurrentRole').textContent = currentUser.isAdmin ? 'Administrator' : 'Team Member';
-            const settingsBtn = document.getElementById('settingsBtn');
-            settingsBtn.style.display = currentUser.isAdmin ? 'inline-flex' : 'none';
-            loadData();
-            buildPhoneRegistry();
-            renderTable(allLeads);
-            updateMetrics();
-            updateAssignedPeopleSection();
-            addDebugLog('✅ Dashboard ready for ' + currentUser.displayName, 'success');
-        }
+    document.getElementById('loginPage').style.display = 'none';
+    document.getElementById('appShell').classList.remove('hidden');
+    document.getElementById('headerUsername').textContent = currentUser.displayName;
+    document.getElementById('headerUserRole').textContent = currentUser.isAdmin ? 'Administrator' : 'Team Member';
+    document.getElementById('settingsCurrentUser').textContent = currentUser.displayName;
+    document.getElementById('settingsCurrentRole').textContent = currentUser.isAdmin ? 'Administrator' : 'Team Member';
+    const settingsBtn = document.getElementById('settingsBtn');
+    settingsBtn.style.display = currentUser.isAdmin ? 'inline-flex' : 'none';
+
+    loadData();
+    buildPhoneRegistry();
+
+    let visibleLeads = allLeads;
+
+    // 👉 Team member ko sirf apne leads
+    if (!currentUser.isAdmin) {
+        visibleLeads = allLeads.filter(l => l.assign_to === currentUser.displayName);
+    }
+
+    renderTable(visibleLeads);
+    updateMetrics();
+    updateAssignedPeopleSection();
+    addDebugLog('✅ Dashboard ready for ' + currentUser.displayName, 'success');
+}
 
         function openSettingsModal() {
             if (!currentUser.isAdmin) {
@@ -1086,32 +1095,46 @@
         }
 
         function applyFilters() {
-            const name = document.getElementById('searchName').value.toLowerCase();
-            const cat = document.getElementById('filterCategory').value;
-            const seg = document.getElementById('filterSegment').value;
-            const assignTo = document.getElementById('filterAssignTo').value;
-            const st  = document.getElementById('filterStatus').value;
+    const name = document.getElementById('searchName').value.toLowerCase();
+    const cat = document.getElementById('filterCategory').value;
+    const seg = document.getElementById('filterSegment').value;
+    const assignToFilter = document.getElementById('filterAssignTo').value;
+    const st  = document.getElementById('filterStatus').value;
 
-            const filtered = allLeads.filter(l =>
-                (name === '' || (l.full_name || '').toLowerCase().includes(name)) &&
-                (cat === '' || l.category === cat) &&
-                (seg === '' || l.segment === seg) &&
-                (assignTo === '' || l.assign_to === assignTo) &&
-                (st  === '' || l.status === st)
-            );
-            renderTable(filtered);
-            addDebugLog('Filter: ' + filtered.length + '/' + allLeads.length, 'info');
-        }
+    let baseLeads = allLeads;
+
+    // 👉 Non-admin ke liye base set sirf uske leads
+    if (!currentUser.isAdmin) {
+        baseLeads = allLeads.filter(l => l.assign_to === currentUser.displayName);
+    }
+
+    const filtered = baseLeads.filter(l =>
+        (name === '' || (l.full_name || '').toLowerCase().includes(name)) &&
+        (cat === '' || l.category === cat) &&
+        (seg === '' || l.segment === seg) &&
+        (assignToFilter === '' || l.assign_to === assignToFilter) &&
+        (st === '' || l.status === st)
+    );
+
+    renderTable(filtered);
+    addDebugLog('Filter: ' + filtered.length + '/' + baseLeads.length, 'info');
+}
 
         function clearFilters() {
-            document.getElementById('searchName').value = '';
-            document.getElementById('filterCategory').value = '';
-            document.getElementById('filterSegment').value = '';
-            document.getElementById('filterAssignTo').value = '';
-            document.getElementById('filterStatus').value = '';
-            renderTable(allLeads);
-            addDebugLog('Filters cleared', 'info');
-        }
+    document.getElementById('searchName').value = '';
+    document.getElementById('filterCategory').value = '';
+    document.getElementById('filterSegment').value = '';
+    document.getElementById('filterAssignTo').value = '';
+    document.getElementById('filterStatus').value = '';
+
+    let visibleLeads = allLeads;
+    if (!currentUser.isAdmin) {
+        visibleLeads = allLeads.filter(l => l.assign_to === currentUser.displayName);
+    }
+
+    renderTable(visibleLeads);
+    addDebugLog('Filters cleared', 'info');
+}
 
         function updateMetrics() {
             document.getElementById('kpiTotal').textContent = allLeads.length;
@@ -1163,6 +1186,7 @@
     </script>
 </body>
 </html>
+
 
 
 
