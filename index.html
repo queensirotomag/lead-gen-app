@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title> Centralized Digital Lead Management </title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         :root {
             --bg-body: #050816;
@@ -212,6 +212,20 @@
         .message-success { background: rgba(34, 197, 94, 0.15); color: var(--success); border-left-color: var(--success); }
         .message-error { background: rgba(239, 68, 68, 0.15); color: var(--danger); border-left-color: var(--danger); }
         @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+        @media (max-width: 768px) {
+          .app-main { grid-template-columns: 1fr; }
+          .sidebar { 
+            position: fixed; left: -280px; width: 280px; height: 100vh; z-index: 100; transition: left 0.3s; 
+              }
+          .sidebar.open { left: 0; }
+          .header { padding: 0 16px; position: relative; }
+          .hamburger { display: block; cursor: pointer; padding: 8px; font-size: 20px; color: var(--text-main); }
+          .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+          .filters-row { grid-template-columns: 1fr; }
+          .page-title { font-size: 20px; }
+          table { font-size: 11px; }
+          th, td { padding: 8px 4px; }
+            }
 
         .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); }
         .modal.show { display: flex; align-items: center; justify-content: center; }
@@ -272,6 +286,7 @@
     <div class="app-shell hidden" id="appShell">
         <header class="header">
             <div class="brand">
+                <div class="hamburger" onclick="toggleSidebar()">☰</div>
                 <div class="brand-logo">📊</div>
                 <div>
                     <div class="brand-text">Centralized Digital Lead Management</div>
@@ -1133,9 +1148,10 @@
             c.appendChild(div);
             setTimeout(() => div.remove(), 5000);
         }
+        function toggleSidebar() {
+  document.querySelector('.sidebar').classList.toggle('open');
+}
     </script>
 </body>
 </html>
-
-
 
