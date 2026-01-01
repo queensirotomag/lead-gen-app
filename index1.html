@@ -2292,12 +2292,24 @@
         }
 
         function updateField(leadId, field, val) {
-            const l = allLeads.find(x => x.lead_id === leadId);
-            if (!l) return;
-            l[field] = val;
-        saveData();
-        refreshView();
-        addDebugLog('Updated ' + leadId + ' - ' + field, 'success');
+    const l = allLeads.find(x => x.lead_id === leadId);
+    if (!l) return;
+
+    l[field] = val;
+    saveData();
+
+    // 🔹 Admin = sab, Team member = sirf apne leads
+    let baseLeads = allLeads;
+    if (!currentUser.isAdmin) {
+        baseLeads = allLeads.filter(x => x.assign_to === currentUser.displayName);
+    }
+
+    renderTable(baseLeads);
+    updateMetrics(baseLeads);
+    updateAssignedPeopleSection(baseLeads);
+
+    addDebugLog('Updated ' + leadId + ' - ' + field, 'success');
+}
 
         function deleteLead(leadId) {
             if (!confirm('Delete lead?')) return;
@@ -2441,6 +2453,7 @@
     </script>
 </body>
 </html>
+
 
 
 
