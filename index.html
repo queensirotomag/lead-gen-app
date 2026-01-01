@@ -560,16 +560,15 @@
     loadData();
     buildPhoneRegistry();
 
-    let visibleLeads = allLeads;
-
-    // 👉 Team member ko sirf apne leads
+    // 🔹 Admin = sab, Team member = sirf apne leads
+    let baseLeads = allLeads;
     if (!currentUser.isAdmin) {
-        visibleLeads = allLeads.filter(l => l.assign_to === currentUser.displayName);
+        baseLeads = allLeads.filter(l => l.assign_to === currentUser.displayName);
     }
 
-    renderTable(visibleLeads);
-    updateMetrics();
-    updateAssignedPeopleSection();
+    renderTable(baseLeads);
+    updateMetrics(baseLeads);
+    updateAssignedPeopleSection(baseLeads);
     addDebugLog('✅ Dashboard ready for ' + currentUser.displayName, 'success');
 }
 
@@ -1071,12 +1070,9 @@
             const l = allLeads.find(x => x.lead_id === leadId);
             if (!l) return;
             l[field] = val;
-            saveData();
-            renderTable(allLeads);
-            updateMetrics();
-            updateAssignedPeopleSection();
-            addDebugLog('Updated ' + leadId + ' - ' + field, 'success');
-        }
+        saveData();
+        refreshView();
+        addDebugLog('Updated ' + leadId + ' - ' + field, 'success');
 
         function deleteLead(leadId) {
             if (!confirm('Delete lead?')) return;
@@ -1085,13 +1081,12 @@
             const phone = allLeads[idx].phone_number;
             const email = allLeads[idx].email;
             allLeads.splice(idx, 1);
-            registeredPhones.delete(phone);
-            if (email && email !== '') registeredEmails.delete(email);
-            saveData();
-            renderTable(allLeads);
-            updateMetrics();
-            updateAssignedPeopleSection();
-            addDebugLog('Lead deleted', 'success');
+        registeredPhones.delete(phone);
+        if (email && email !== '') registeredEmails.delete(email);
+        saveData();
+        refreshView();
+        addDebugLog('Lead deleted', 'success');
+
         }
 
         function applyFilters() {
@@ -1102,8 +1097,6 @@
     const st  = document.getElementById('filterStatus').value;
 
     let baseLeads = allLeads;
-
-    // 👉 Non-admin ke liye base set sirf uske leads
     if (!currentUser.isAdmin) {
         baseLeads = allLeads.filter(l => l.assign_to === currentUser.displayName);
     }
@@ -1117,6 +1110,8 @@
     );
 
     renderTable(filtered);
+    updateMetrics(filtered);
+    updateAssignedPeopleSection(filtered);
     addDebugLog('Filter: ' + filtered.length + '/' + baseLeads.length, 'info');
 }
 
@@ -1132,45 +1127,71 @@
         visibleLeads = allLeads.filter(l => l.assign_to === currentUser.displayName);
     }
 
-    renderTable(visibleLeads);
+    refreshView();
     addDebugLog('Filters cleared', 'info');
 }
 
-        function updateMetrics() {
-            document.getElementById('kpiTotal').textContent = allLeads.length;
-            document.getElementById('kpiAssigned').textContent = allLeads.filter(l => l.assign_to && l.assign_to !== '').length;
-            document.getElementById('kpiQualified').textContent = allLeads.filter(l => l.status === 'Qualified' || l.status === 'Converted').length;
-            document.getElementById('kpiCampaign').textContent = allLeads.filter(l => l.campaign_enabled === 'Yes').length;
-            document.getElementById('sidebarTotalLeads').textContent = allLeads.length;
-        }
+        function updateMetrics(baseLeads = allLeads) {
+    const total = baseLeads.length;
+    const assigned = baseLeads.filter(l => l.assign_to && l.assign_to !== '').length;
+    const qualified = baseLeads.filter(l => l.status === 'Qualified' || l.status === 'Converted').length;
+    const campaign = baseLeads.filter(l => l.campaign_enabled === 'Yes').length;
 
-        function updateAssignedPeopleSection() {
-            const cont = document.getElementById('assignedPeopleContainer');
-            const stats = {};
-            TEAM_MEMBERS.forEach(n => stats[n] = { count: 0, qualified: 0 });
-            allLeads.forEach(l => {
-                if (l.assign_to && l.assign_to !== '' && stats[l.assign_to]) {
-                    stats[l.assign_to].count++;
-                    if (l.status === 'Qualified' || l.status === 'Converted') {
-                        stats[l.assign_to].qualified++;
-                    }
-                }
-            });
-            let html = '';
-            TEAM_MEMBERS.forEach(n => {
-                if (stats[n].count > 0) {
-                    html += `
-                        <div class="assigned-person">
-                            <div class="assigned-person-name">👤 ${n}</div>
-                            <div class="assigned-stats">
-                                <div class="stat-item"><span>Leads:</span><span>${stats[n].count}</span></div>
-                                <div class="stat-item"><span>Qualified:</span><span>${stats[n].qualified}</span></div>
-                            </div>
-                        </div>`;
-                }
-            });
-            cont.innerHTML = html || '<div style="font-size:11px;color:var(--text-soft);text-align:center;">No assignments</div>';
+    document.getElementById('kpiTotal').textContent = total;
+    document.getElementById('kpiAssigned').textContent = assigned;
+    document.getElementById('kpiQualified').textContent = qualified;
+    document.getElementById('kpiCampaign').textContent = campaign;
+
+    // Sidebar DB total – current view ke hisaab se
+    document.getElementById('sidebarTotalLeads').textContent = total;
+}
+
+        function updateAssignedPeopleSection(baseLeads = allLeads) {
+    const cont = document.getElementById('assignedPeopleContainer');
+    const stats = {};
+    TEAM_MEMBERS.forEach(n => stats[n] = { count: 0, qualified: 0 });
+
+    baseLeads.forEach(l => {
+        if (l.assign_to && l.assign_to !== '' && stats[l.assign_to]) {
+            stats[l.assign_to].count++;
+            if (l.status === 'Qualified' || l.status === 'Converted') {
+                stats[l.assign_to].qualified++;
+            }
         }
+    });
+
+    let html = '';
+
+    if (currentUser.isAdmin) {
+        // 🔹 Admin ko sab members ka summary
+        TEAM_MEMBERS.forEach(n => {
+            if (stats[n].count > 0) {
+                html += `
+                    <div class="assigned-person">
+                        <div class="assigned-person-name">👤 ${n}</div>
+                        <div class="assigned-stats">
+                            <div class="stat-item"><span>Leads:</span><span>${stats[n].count}</span></div>
+                            <div class="stat-item"><span>Qualified:</span><span>${stats[n].qualified}</span></div>
+                        </div>
+                    </div>`;
+            }
+        });
+    } else {
+        // 🔹 Team member ko sirf apna box
+        const me = currentUser.displayName;
+        const my = stats[me] || { count: 0, qualified: 0 };
+        html = `
+            <div class="assigned-person">
+                <div class="assigned-person-name">👤 ${me}</div>
+                <div class="assigned-stats">
+                    <div class="stat-item"><span>Leads:</span><span>${my.count}</span></div>
+                    <div class="stat-item"><span>Qualified:</span><span>${my.qualified}</span></div>
+                </div>
+            </div>`;
+    }
+
+    cont.innerHTML = html || '<div style="font-size:11px;color:var(--text-soft);text-align:center;">No assignments</div>';
+}
 
         function showMessage(text, type) {
             const c = document.getElementById('messageContainer');
@@ -1183,9 +1204,1256 @@
         function toggleSidebar() {
   document.querySelector('.sidebar').classList.toggle('open');
 }
+        function refreshView() {
+    let baseLeads = allLeads;
+    if (!currentUser.isAdmin) {
+        baseLeads = allLeads.filter(l => l.assign_to === currentUser.displayName);
+    }
+    renderTable(baseLeads);
+    updateMetrics(baseLeads);
+    updateAssignedPeopleSection(baseLeads);
+}
     </script>
 </body>
 </html>
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title> Centralized Digital Lead Management </title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        :root {
+            --bg-body: #050816;
+            --bg-header: #050816;
+            --bg-sidebar: #0b1020;
+            --bg-card: #0f172a;
+            --text-main: #f9fafb;
+            --text-muted: #9ca3af;
+            --text-soft: #6b7280;
+            --accent: #6366f1;
+            --accent-soft: rgba(99, 102, 241, 0.15);
+            --accent-strong: #4f46e5;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; }
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: radial-gradient(circle at top, #111827 0, #020617 45%, #020617 100%);
+            color: var(--text-main);
+            font-size: 13px;
+        }
+
+        .login-page {
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at top, #111827 0, #020617 45%, #020617 100%);
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 420px;
+            padding: 40px 32px 32px;
+            background: radial-gradient(circle at top left, #111827, #020617 60%);
+            border-radius: 16px;
+            border: 1px solid rgba(31, 41, 55, 0.9);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+        }
+
+        .login-header { text-align: center; margin-bottom: 28px; }
+        .login-title { font-size: 22px; font-weight: 700; color: var(--text-main); margin-bottom: 4px; }
+        .login-form { display: flex; flex-direction: column; gap: 16px; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+        .form-group input {
+            padding: 11px 12px; background: #020617; border: 1px solid rgba(55, 65, 81, 0.9);
+            border-radius: 8px; color: var(--text-main); font-size: 13px;
+        }
+        .form-group input:focus {
+            outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+        .login-btn {
+            margin-top: 6px; padding: 11px; width: 100%;
+            background: linear-gradient(135deg, var(--accent-strong), #22c55e);
+            border: none; border-radius: 8px; color: #020617; font-size: 14px; font-weight: 600;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .login-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4); }
+        .login-footer {
+            margin-top: 20px; font-size: 11px; color: var(--text-soft); text-align: center;
+            border-top: 1px solid rgba(31, 41, 55, 0.6); padding-top: 10px;
+        }
+
+        .app-shell { display: grid; grid-template-rows: 60px 1fr; width: 100%; height: 100vh; overflow: hidden; }
+        .app-shell.hidden { display: none; }
+        .app-main { display: grid; grid-template-columns: 280px 1fr; width: 100%; height: 100%; overflow: hidden; }
+
+        .header {
+            background: rgba(5, 8, 22, 0.95); backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(55, 65, 81, 0.8);
+            padding: 0 24px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+        }
+        .brand { display: flex; align-items: center; gap: 10px; }
+        .brand-logo {
+            width: 36px; height: 36px; border-radius: 8px;
+            background: conic-gradient(from 210deg, #4f46e5, #22c55e, #f59e0b, #4f46e5);
+            display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; color: #020617; flex-shrink: 0;
+        }
+        .brand-text { font-weight: 600; font-size: 16px; }
+        .brand-sub { font-size: 11px; color: var(--text-soft); }
+        .header-right { display: flex; gap: 12px; align-items: center; }
+        .user-info { font-size: 11px; text-align: right; }
+        .user-name { color: var(--text-main); font-weight: 600; }
+        .user-role { color: var(--text-soft); font-size: 10px; }
+        .header-btn {
+            padding: 7px 11px; background: rgba(17, 24, 39, 0.9);
+            border: 1px solid rgba(55, 65, 81, 0.9); border-radius: 6px; color: var(--text-main);
+            cursor: pointer; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;
+        }
+        .header-btn:hover { background: rgba(55, 65, 81, 0.8); }
+
+        .sidebar {
+            padding: 16px 12px; background: radial-gradient(circle at top left, #020617, #020617 55%, #020617 100%);
+            border-right: 1px solid rgba(31, 41, 55, 0.85); overflow-y: auto; overflow-x: hidden; flex-shrink: 0;
+            display: flex; flex-direction: column; gap: 20px;
+        }
+        .sidebar::-webkit-scrollbar { width: 6px; }
+        .sidebar::-webkit-scrollbar-thumb { background: rgba(55, 65, 81, 0.5); border-radius: 3px; }
+        .sidebar-section { flex-shrink: 0; }
+        .sidebar-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-soft); margin-bottom: 10px; font-weight: 600; }
+        .nav-item {
+            display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 6px; font-size: 12px; color: var(--text-muted);
+            cursor: pointer; transition: all 0.2s; margin-bottom: 4px;
+        }
+        .nav-item:hover { background: rgba(55, 65, 81, 0.6); color: var(--text-main); }
+        .nav-item.active { background: var(--accent-soft); color: var(--accent); border: 1px solid rgba(99, 102, 241, 0.7); }
+        .file-input-wrapper input[type="file"] { display: none; }
+        .file-input-label {
+            display: block; background: rgba(17, 24, 39, 0.8); color: var(--text-main);
+            padding: 10px; border-radius: 6px; cursor: pointer; text-align: center; font-weight: 600;
+            border: 1px solid rgba(55, 65, 81, 0.9); transition: all 0.2s; font-size: 12px; margin-bottom: 6px;
+        }
+        .file-input-label:hover { background: rgba(55, 65, 81, 0.8); }
+        .btn {
+            width: 100%; padding: 10px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600;
+            cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s; margin-bottom: 6px;
+        }
+        .btn-primary { background: linear-gradient(135deg, var(--accent-strong), #22c55e); color: #020617; }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary { background: rgba(17, 24, 39, 0.8); color: var(--text-main); border: 1px solid rgba(55, 65, 81, 0.9); }
+        .sidebar-stats { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; padding: 8px; background: rgba(15, 23, 42, 0.6); border-radius: 4px; }
+        .sidebar-stats strong { color: var(--text-main); font-weight: 700; }
+        .assigned-person {
+            background: rgba(99, 102, 241, 0.15); padding: 10px; border-radius: 6px; margin-bottom: 6px;
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+        .assigned-person-name { font-size: 14px; font-weight: 700; color: var(--accent); margin-bottom: 6px; }
+        .assigned-stats { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+        .stat-item { display: flex; justify-content: space-between; margin-bottom: 2px; }
+        .divider { height: 1px; background: rgba(31, 41, 55, 0.5); margin: 0; }
+        .debug-log {
+            background: #020617; border: 1px solid rgba(31, 41, 55, 0.9); border-radius: 4px; padding: 8px;
+            font-family: "Courier New", monospace; font-size: 10px; max-height: 120px; overflow-y: auto;
+        }
+        .debug-log::-webkit-scrollbar { width: 4px; }
+        .debug-log::-webkit-scrollbar-thumb { background: rgba(55, 65, 81, 0.5); }
+        .log-entry { padding: 2px 0; opacity: 0.9; line-height: 1.2; }
+        .log-entry.success { color: var(--success); }
+        .log-entry.error { color: var(--danger); }
+        .log-entry.warning { color: var(--warning); }
+        .log-entry.info { color: #60a5fa; }
+
+        .page { padding: 16px; overflow: auto; flex-shrink: 1; }
+        .page::-webkit-scrollbar { width: 6px; }
+        .page::-webkit-scrollbar-thumb { background: rgba(55, 65, 81, 0.5); border-radius: 3px; }
+        .page-header { margin-bottom: 16px; }
+        .page-title { font-size: 24px; font-weight: 600; margin-bottom: 2px; }
+        .page-subtitle { font-size: 12px; color: var(--text-soft); }
+
+        .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+        .kpi-card {
+            padding: 14px; background: rgba(15, 23, 42, 0.6); border-radius: 8px; border: 1px solid rgba(31, 41, 55, 0.5); text-align: center;
+        }
+        .kpi-number { font-size: 24px; font-weight: 700; }
+        .kpi-label { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+        .card {
+            background: radial-gradient(circle at top left, #111827, #020617 60%);
+            border-radius: 8px; border: 1px solid rgba(31, 41, 55, 0.9);
+            padding: 16px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+            display: flex; flex-direction: column; flex: 1; overflow: hidden;
+        }
+        .card-header { margin-bottom: 12px; }
+        .card-title { font-size: 16px; font-weight: 600; }
+        .card-subtitle { font-size: 11px; color: var(--text-soft); margin-top: 2px; }
+
+        .filters-container {
+            background: rgba(15, 23, 42, 0.8); padding: 12px; border-radius: 8px; margin-bottom: 12px;
+            border: 1px solid rgba(31, 41, 55, 0.7);
+        }
+        .filters-title { font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+        .filters-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+        .filter-group label { font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; }
+        .filter-group input, .filter-group select {
+            width: 100%; padding: 8px; background: #020617; border: 1px solid rgba(55, 65, 81, 0.9);
+            border-radius: 4px; color: var(--text-main); font-size: 11px;
+        }
+
+        .table-wrapper {
+            border-radius: 8px; border: 1px solid rgba(31, 41, 55, 0.9); overflow: auto; flex: 1;
+        }
+        .table-wrapper::-webkit-scrollbar { width: 6px; height: 6px; }
+        .table-wrapper::-webkit-scrollbar-thumb { background: rgba(55, 65, 81, 0.5); border-radius: 3px; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        thead { background: linear-gradient(90deg, #111827, #020617); position: sticky; top: 0; z-index: 10; }
+        th { padding: 10px 8px; text-align: left; font-weight: 600; color: var(--text-muted); white-space: nowrap; font-size: 11px; border-bottom: 1px solid rgba(31, 41, 55, 0.6); }
+        td { padding: 10px 8px; border-bottom: 1px solid rgba(31, 41, 55, 0.6); }
+        tbody tr:hover { background: rgba(17, 24, 39, 0.8); }
+
+        select { background: #020617; border: 1px solid rgba(55, 65, 81, 0.9); color: var(--text-main); padding: 5px 6px; border-radius: 4px; font-size: 11px; cursor: pointer; }
+        .btn-danger { background: var(--danger); color: white; padding: 5px 8px; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600; }
+        .badge { display: inline-block; padding: 3px 6px; background: var(--accent-soft); color: var(--accent); border-radius: 3px; font-size: 10px; font-weight: 600; }
+        .empty-state { text-align: center; padding: 40px 20px; color: var(--text-soft); font-size: 12px; }
+
+        .message {
+            padding: 12px 16px; border-radius: 6px; margin-bottom: 12px; border-left: 3px solid; display: none; font-size: 12px;
+        }
+        .message.show { display: block; animation: slideIn 0.3s ease; }
+        .message-success { background: rgba(34, 197, 94, 0.15); color: var(--success); border-left-color: var(--success); }
+        .message-error { background: rgba(239, 68, 68, 0.15); color: var(--danger); border-left-color: var(--danger); }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+        @media (max-width: 768px) {
+          .app-main { grid-template-columns: 1fr; }
+          .sidebar { 
+            position: fixed; left: -280px; width: 280px; height: 100vh; z-index: 100; transition: left 0.3s; 
+              }
+          .sidebar.open { left: 0; }
+          .header { padding: 0 16px; position: relative; }
+          .hamburger { display: block; cursor: pointer; padding: 8px; font-size: 20px; color: var(--text-main); }
+          .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+          .filters-row { grid-template-columns: 1fr; }
+          .page-title { font-size: 20px; }
+          table { font-size: 11px; }
+          th, td { padding: 8px 4px; }
+            }
+
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); }
+        .modal.show { display: flex; align-items: center; justify-content: center; }
+        .modal-content {
+            background: radial-gradient(circle at top left, #111827, #020617 60%); border: 1px solid rgba(31, 41, 55, 0.9);
+            border-radius: 12px; padding: 0; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+        }
+        .modal-header {
+            padding: 16px 20px; border-bottom: 1px solid rgba(31, 41, 55, 0.5); display: flex; justify-content: space-between; align-items: center;
+        }
+        .modal-title { font-size: 16px; font-weight: 600; }
+        .modal-close { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; }
+        .modal-body { padding: 16px 20px 4px; }
+        .modal-footer { padding: 12px 20px 14px; border-top: 1px solid rgba(31, 41, 55, 0.5); text-align: right; display: flex; gap: 10px; justify-content: flex-end; }
+        .btn-modal { padding: 8px 14px; border-radius: 6px; border: none; font-size: 12px; font-weight: 600; cursor: pointer; }
+        .btn-modal-primary { background: linear-gradient(135deg, var(--accent-strong), #22c55e); color: #020617; }
+        .btn-modal-secondary { background: rgba(17, 24, 39, 0.9); color: var(--text-main); border: 1px solid rgba(55, 65, 81, 0.9); }
+
+        .settings-section { margin-bottom: 16px; }
+        .settings-section-title { font-size: 11px; text-transform: uppercase; color: var(--text-soft); margin-bottom: 8px; font-weight: 600; }
+        .settings-item { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(31, 41, 55, 0.5); border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+        .settings-item-title { font-size: 13px; font-weight: 600; }
+        .settings-item-subtitle { font-size: 11px; color: var(--text-soft); margin-top: 2px; }
+        .role-badge { display: inline-block; padding: 3px 8px; background: var(--accent-soft); color: var(--accent); border-radius: 4px; font-size: 10px; font-weight: 600; margin-top: 6px; }
+        .role-badge.admin { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+        .user-actions { display: flex; gap: 8px; margin-top: 10px; }
+        .btn-edit, .btn-delete { flex: 1; padding: 6px 8px; border: none; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; }
+        .btn-edit { background: var(--accent-soft); color: var(--accent); border: 1px solid rgba(99, 102, 241, 0.3); }
+        .btn-delete { background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
+    </style>
+</head>
+<body>
+    <!-- LOGIN PAGE -->
+    <div class="login-page" id="loginPage">
+        <div class="login-container">
+            <div class="login-header">
+                <div class="login-title">Centralized Digital Lead Management</div>
+            </div>
+            <form class="login-form" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="loginUsername" placeholder="Enter username" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="loginPassword" placeholder="Enter password" required>
+                </div>
+                <button type="submit" class="login-btn">Sign In</button>
+            </form>
+            <div class="login-footer">
+                Use your assigned Rotomag CDLM credentials.
+            </div>
+        </div>
+    </div>
+
+    <!-- APP SHELL -->
+    <div class="app-shell hidden" id="appShell">
+        <header class="header">
+            <div class="brand">
+                <div class="hamburger" onclick="toggleSidebar()">☰</div>
+                <div class="brand-logo">📊</div>
+                <div>
+                    <div class="brand-text">Centralized Digital Lead Management</div>
+                    <div class="brand-sub">CDLM</div>
+               </div>
+            </div>
+            <div class="header-right">
+                <div class="user-info">
+                    <div class="user-name" id="headerUsername">User</div>
+                    <div class="user-role" id="headerUserRole">Team Member</div>
+                </div>
+                <button class="header-btn" id="settingsBtn" onclick="openSettingsModal()" style="display:none;">⚙️ Settings</button>
+                <button class="header-btn" onclick="handleLogout()">🚪 Logout</button>
+            </div>
+        </header>
+
+        <main class="app-main">
+            <!-- SIDEBAR -->
+            <aside class="sidebar">
+                <div class="sidebar-section">
+                    <div class="sidebar-title">Dashboard</div>
+                    <div class="nav-item active"><span>📊</span><span>Overview</span></div>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="sidebar-title">Import Data</div>
+                    <div class="file-input-wrapper">
+                        <input type="file" id="csvFile" accept=".csv,.xlsx" onchange="handleFileSelect(event)">
+                        <label for="csvFile" class="file-input-label">📁 Select File (CSV/Sheet)</label>
+                    </div>
+                    <button id="processBtn" class="btn btn-primary" onclick="processCSV()" disabled>⚡ Process</button>
+                    <button class="btn btn-secondary" onclick="clearImport()">🔄 Reset</button>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="sidebar-section">
+                    <div class="sidebar-title">Lead Database</div>
+                    <div class="sidebar-stats">📊 Total: <strong id="sidebarTotalLeads">0</strong></div>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="sidebar-title">Team Assignment</div>
+                    <div id="assignedPeopleContainer"></div>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="sidebar-title">Activity</div>
+                    <div class="debug-log" id="debugLog">
+                        <div class="log-entry info">[--:--:--] Loading…</div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- MAIN PAGE -->
+            <section class="page">
+                <div class="page-header">
+                    <h1 class="page-title">CDLM</h1>
+                    <p class="page-subtitle">Upload CSV / Google Sheet → Auto Clean &amp; Segment → Manage &amp; Track</p>
+                </div>
+
+                <div id="messageContainer"></div>
+
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-number" id="kpiTotal">0</div>
+                        <div class="kpi-label">Total Leads</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-number" id="kpiAssigned">0</div>
+                        <div class="kpi-label">Assigned</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-number" id="kpiQualified">0</div>
+                        <div class="kpi-label">Qualified / Converted</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-number" id="kpiCampaign">0</div>
+                        <div class="kpi-label">Campaign Enabled</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">📊 All Leads</div>
+                            <div class="card-subtitle">Centralized view • Filter • Edit • Delete</div>
+                        </div>
+                    </div>
+
+                    <div class="filters-container">
+                        <div class="filters-title">🔍 Filters</div>
+                        <div class="filters-row">
+                            <div class="filter-group">
+                                <label>Name</label>
+                                <input type="text" id="searchName" placeholder="Search…" onkeyup="applyFilters()">
+                            </div>
+                            <div class="filter-group">
+                                <label>Category</label>
+                                <select id="filterCategory" onchange="applyFilters()">
+                                    <option value="">All</option>
+                                    <option value="Request Call Back">Request Call Back</option>
+                                    <option value="Meet Senior Person">Meet Senior Person</option>
+                                    <option value="Interested in Quote">Interested in Quote</option>
+                                    <option value="Send Product Details">Send Product Details</option>
+                                    <option value="Requesting Demo">Requesting Demo</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label>Segment</label>
+                                <select id="filterSegment" onchange="applyFilters()">
+                                    <option value="">All</option>
+                                    <option value="Pune">Pune</option>
+                                    <option value="Ahmedabad">Ahmedabad</option>
+                                    <option value="Bangalore">Bangalore</option>
+                                    <option value="Maharashtra">Maharashtra</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label>Assign To</label>
+                                <select id="filterAssignTo" onchange="applyFilters()">
+                                    <option value="">All</option>
+                                    <option value="Onkar">Onkar</option>
+                                    <option value="Goraksha">Goraksha</option>
+                                    <option value="Sachin">Sachin</option>
+                                    <option value="Rajesh">Rajesh</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label>Status</label>
+                                <select id="filterStatus" onchange="applyFilters()">
+                                    <option value="">All</option>
+                                    <option value="Lead Collected">Lead Collected</option>
+                                    <option value="Assigned">Assigned</option>
+                                    <option value="Qualified">Qualified</option>
+                                    <option value="Converted">Converted</option>
+                                </select>
+                            </div>
+                            <div style="display:flex;gap:6px;align-items:flex-end;">
+                                <button class="btn btn-primary" style="margin:0;padding:8px;" onclick="applyFilters()">Filter</button>
+                                <button class="btn btn-secondary" style="margin:0;padding:8px;" onclick="clearFilters()">Reset</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="table-wrapper">
+                        <table id="leadsTable">
+                            <thead>
+                                <tr>
+                                    <th>Lead ID</th>
+                                    <th>Name</th>
+                                    <th>Phone</th>
+                                    <th>Email</th>
+                                    <th>Product</th>
+                                    <th>City</th>
+                                    <th>Who you are?</th>
+                                    <th>Reference</th>
+                                    <th>Category</th>
+                                    <th>Segment</th>
+                                    <th>Assign To</th>
+                                    <th>Status</th>
+                                    <th>Campaign</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody">
+                                <tr>
+                                    <td colspan="14">
+                                        <div class="empty-state">📁 No leads yet.</div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- SETTINGS MODAL -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">⚙️ Settings</div>
+                <button class="modal-close" onclick="closeSettingsModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-section">
+                    <div class="settings-section-title">Current User</div>
+                    <div class="settings-item">
+                        <div class="settings-item-title" id="settingsCurrentUser">User</div>
+                        <div class="settings-item-subtitle" id="settingsCurrentRole">Role</div>
+                        <span class="role-badge admin">Admin</span>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <div class="settings-section-title">Manage Users</div>
+                    <div id="usersListContainer"></div>
+                    <button class="btn btn-primary" onclick="showAddUserForm()" style="width:100%;margin-top:12px;">+ Add New User</button>
+                </div>
+
+                <div class="settings-section">
+                    <div class="settings-section-title">About</div>
+                    <div class="settings-item">
+                        <div class="settings-item-title">CDLM v4.2 AUTOMATIC CLEANSING PROCESS </div>
+                        <div style="margin-top:8px;font-size:10px;color:var(--text-soft);">
+                            📧 Support: queensi@rotomag.com
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-modal btn-modal-secondary" onclick="closeSettingsModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const USERS = {
+            'admin':   { password: 'admin123',   displayName: 'Admin',   isAdmin: true  },
+            'onkar':   { password: 'onkar123',   displayName: 'Onkar',   isAdmin: false },
+            'goraksha':{ password: 'goraksha123',displayName: 'Goraksha',isAdmin: false },
+            'sachin':  { password: 'sachin123',  displayName: 'Sachin',  isAdmin: false },
+            'rajesh':  { password: 'rajesh123',  displayName: 'Rajesh',  isAdmin: false }
+        };
+
+        const TEAM_MEMBERS = ['Onkar', 'Goraksha', 'Sachin', 'Rajesh'];
+        const CATEGORY_OPTIONS = ['Request Call Back', 'Meet Senior Person', 'Interested in Quote', 'Send Product Details', 'Requesting Demo'];
+
+        let currentUser = null;
+        const STORAGE_KEY = 'cdlm_leads_store_v9';
+        let allLeads = [];
+        let registeredPhones = new Set();
+        let registeredEmails = new Set();
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const u = document.getElementById('loginUsername').value.trim();
+            const p = document.getElementById('loginPassword').value.trim();
+
+            if (USERS[u] && USERS[u].password === p) {
+                currentUser = { username: u, displayName: USERS[u].displayName, isAdmin: USERS[u].isAdmin };
+                localStorage.setItem('cdlm_current_user', JSON.stringify(currentUser));
+                showDashboard();
+            } else {
+                alert('Invalid username or password.');
+            }
+        }
+
+        function handleLogout() {
+            if (!confirm('Logout from CDLM?')) return;
+            currentUser = null;
+            localStorage.removeItem('cdlm_current_user');
+            document.getElementById('appShell').classList.add('hidden');
+            document.getElementById('loginPage').style.display = 'flex';
+            document.getElementById('loginUsername').value = '';
+            document.getElementById('loginPassword').value = '';
+        }
+
+        function showDashboard() {
+    document.getElementById('loginPage').style.display = 'none';
+    document.getElementById('appShell').classList.remove('hidden');
+    document.getElementById('headerUsername').textContent = currentUser.displayName;
+    document.getElementById('headerUserRole').textContent = currentUser.isAdmin ? 'Administrator' : 'Team Member';
+    document.getElementById('settingsCurrentUser').textContent = currentUser.displayName;
+    document.getElementById('settingsCurrentRole').textContent = currentUser.isAdmin ? 'Administrator' : 'Team Member';
+    const settingsBtn = document.getElementById('settingsBtn');
+    settingsBtn.style.display = currentUser.isAdmin ? 'inline-flex' : 'none';
+
+    loadData();
+    buildPhoneRegistry();
+
+    // 🔹 Admin = sab, Team member = sirf apne leads
+    let baseLeads = allLeads;
+    if (!currentUser.isAdmin) {
+        baseLeads = allLeads.filter(l => l.assign_to === currentUser.displayName);
+    }
+
+    renderTable(baseLeads);
+    updateMetrics(baseLeads);
+    updateAssignedPeopleSection(baseLeads);
+    addDebugLog('✅ Dashboard ready for ' + currentUser.displayName, 'success');
+}
+
+        function openSettingsModal() {
+            if (!currentUser.isAdmin) {
+                alert('Only Admin can access Settings');
+                return;
+            }
+            updateUsersList();
+            document.getElementById('settingsModal').classList.add('show');
+        }
+
+        function closeSettingsModal() {
+            document.getElementById('settingsModal').classList.remove('show');
+        }
+
+        document.getElementById('settingsModal').addEventListener('click', function(e) {
+            if (e.target === this) closeSettingsModal();
+        });
+
+        function updateUsersList() {
+            const cont = document.getElementById('usersListContainer');
+            let html = '';
+            Object.keys(USERS).forEach(u => {
+                const user = USERS[u];
+                html += `
+                    <div class="settings-item">
+                        <div style="display:flex;justify-content:space-between;align-items:start;">
+                            <div>
+                                <div class="settings-item-title">${user.displayName}</div>
+                                <div class="settings-item-subtitle">${user.isAdmin ? 'Administrator' : 'Team Member'}</div>
+                                <span class="role-badge ${user.isAdmin ? 'admin' : ''}">${user.isAdmin ? 'Admin' : 'Team'}</span>
+                            </div>
+                        </div>
+                        <div class="user-actions">
+                            <button class="btn-edit" onclick="editUser('${u}')">✏️ Edit</button>
+                            <button class="btn-delete" onclick="deleteUser('${u}')" ${u === 'admin' ? 'disabled' : ''}>🗑️ Delete</button>
+                        </div>
+                    </div>
+                `;
+            });
+            cont.innerHTML = html;
+        }
+
+        function editUser(u) {
+            const newPass = prompt('Enter new password for ' + u + ':');
+            if (newPass) {
+                USERS[u].password = newPass;
+                updateUsersList();
+                addDebugLog('✏️ Password updated', 'success');
+            }
+        }
+
+        function deleteUser(u) {
+            if (u === 'admin') { alert('Cannot delete admin user'); return; }
+            if (confirm('Delete user: ' + u + '?')) {
+                delete USERS[u];
+                updateUsersList();
+                addDebugLog('🗑️ User deleted', 'success');
+            }
+        }
+
+        function showAddUserForm() {
+            const newU = prompt('Enter new username:');
+            if (newU && newU.trim()) {
+                if (USERS[newU]) { alert('User already exists'); return; }
+                const newPass = prompt('Enter password:');
+                if (newPass) {
+                    const dispName = prompt('Enter display name:');
+                    if (dispName) {
+                        USERS[newU] = { password: newPass, displayName: dispName, isAdmin: false };
+                        updateUsersList();
+                        addDebugLog('➕ User created', 'success');
+                    }
+                }
+            }
+        }
+
+        function loadData() {
+            try {
+                const stored = localStorage.getItem(STORAGE_KEY);
+                allLeads = stored ? JSON.parse(stored) : [];
+                addDebugLog('Loaded ' + allLeads.length + ' leads', 'success');
+            } catch (e) {
+                allLeads = [];
+                addDebugLog('Load error', 'error');
+            }
+        }
+
+        function saveData() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(allLeads));
+            } catch (e) {
+                addDebugLog('Save error', 'error');
+            }
+        }
+
+        function buildPhoneRegistry() {
+            registeredPhones.clear();
+            registeredEmails.clear();
+            allLeads.forEach(l => {
+                registeredPhones.add(l.phone_number);
+                if (l.email && l.email !== '') registeredEmails.add(l.email);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedUser = localStorage.getItem('cdlm_current_user');
+            if (savedUser) {
+                currentUser = JSON.parse(savedUser);
+                showDashboard();
+            }
+        });
+
+        function addDebugLog(msg, type = 'info') {
+            const box = document.getElementById('debugLog');
+            const div = document.createElement('div');
+            div.className = 'log-entry ' + type;
+            const t = new Date().toLocaleTimeString();
+            div.textContent = '[' + t + '] ' + msg;
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                addDebugLog('File: ' + file.name, 'info');
+                document.getElementById('processBtn').disabled = false;
+            }
+        }
+
+        function clearImport() {
+            document.getElementById('csvFile').value = '';
+            document.getElementById('processBtn').disabled = true;
+        }
+
+        async function processCSV() {
+            const file = document.getElementById('csvFile').files[0];
+            if (!file) {
+                showMessage('Select a file (CSV or Google Sheet export).', 'error');
+                return;
+            }
+
+            try {
+                addDebugLog('Processing…', 'info');
+                document.getElementById('processBtn').disabled = true;
+                const text = await file.text();
+                const rows = parseCSV(text);
+                addDebugLog('Rows parsed: ' + rows.length, 'info');
+                const cleaned = cleanData(rows);
+                addDebugLog('Cleaned: ' + cleaned.length, 'success');
+                const result = filterDuplicates(cleaned);
+                if (result.blocked > 0) {
+                    addDebugLog('🚫 Blocked duplicates: ' + result.blocked, 'warning');
+                }
+                addLeadsToDatabase(result.new);
+                renderTable(allLeads);
+                updateMetrics();
+                updateAssignedPeopleSection();
+                const msg = result.blocked > 0
+                    ? 'Added ' + result.new.length + '. Blocked ' + result.blocked + ' duplicates.'
+                    : 'Added ' + result.new.length + '.';
+                showMessage(msg, 'success');
+            } catch (err) {
+                showMessage('Error: ' + err.message, 'error');
+                addDebugLog('Error: ' + err.message, 'error');
+            } finally {
+                document.getElementById('csvFile').value = '';
+                document.getElementById('processBtn').disabled = false;
+            }
+        }
+        function parseCSV(text) {
+            const lines = text.trim().split('\n');
+            if (lines.length < 2) return [];
+            const headers = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
+            const rows = [];
+            for (let i = 1; i < lines.length; i++) {
+                const cells = parseCSVLine(lines[i]);
+                const row = {};
+                headers.forEach((h, idx) => { 
+                    row[h] = cells[idx] ? cells[idx].trim() : ''; 
+                });
+                if (Object.values(row).some(v => v !== '')) rows.push(row);
+            }
+            return rows;
+        }
+
+        function parseCSVLine(line) {
+            const cells = [];
+            let current = '';
+            let insideQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                const nextChar = line[i + 1];
+                if (char === '"' && nextChar === '"') {
+                    current += '"';
+                    i++;
+                } else if (char === '"') {
+                    insideQuotes = !insideQuotes;
+                } else if (char === ',' && !insideQuotes) {
+                    cells.push(current);
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            cells.push(current);
+            return cells;
+        }
+
+        function levenshtein(a, b) {
+            const m = a.length, n = b.length;
+            const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+            for (let i = 0; i <= m; i++) dp[i][0] = i;
+            for (let j = 0; j <= n; j++) dp[0][j] = j;
+            for (let i = 1; i <= m; i++) {
+                for (let j = 1; j <= n; j++) {
+                    const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+                    dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+                }
+            }
+            return dp[m][n];
+        }
+
+        const COMMON_EMAIL_DOMAINS = ['gmail.com','yahoo.com','outlook.com','hotmail.com','live.com','aol.com','icloud.com','proton.me','protonmail.com','rediffmail.com','rotomag.com','rotosol.com'];
+        const DOMAIN_FIX_MAP = {'mail.com':'gmail.com','gmal.com':'gmail.com','gmial.com':'gmail.com','gmail.co':'gmail.com','gmail.con':'gmail.com','gnail.com':'gmail.com','yahooo.com':'yahoo.com','yahho.com':'yahoo.com','hotmai.com':'hotmail.com','outlok.com':'outlook.com','proton.com':'proton.me','redifmail.com':'rediffmail.com','rotomag.co':'rotomag.com','rotosol.co':'rotosol.com'};
+
+        function bestCommonDomain(d) {
+            let best = { domain: d, distance: Infinity };
+            for (const known of COMMON_EMAIL_DOMAINS) {
+                const dist = levenshtein(d, known);
+                if (dist < best.distance) best = { domain: known, distance: dist };
+            }
+            return best;
+        }
+
+        function fixEmailDomain(domainRaw) {
+            let d = (domainRaw || '').trim().toLowerCase();
+            d = d.replace(/[,;]+$/g, '');
+            if (DOMAIN_FIX_MAP[d]) return { domain: DOMAIN_FIX_MAP[d], corrected: true };
+            if (!/\.[a-z]{2,}$/.test(d)) {
+                const candidate = `${d}.com`;
+                const best = bestCommonDomain(candidate);
+                if (best.distance <= 2) return { domain: best.domain, corrected: true };
+                return { domain: candidate, corrected: true };
+            }
+            const best = bestCommonDomain(d);
+            if (best.distance <= 2) return { domain: best.domain, corrected: true };
+            return { domain: d, corrected: false };
+        }
+
+        function normalizeEmail(raw) {
+            if (!raw) return { email: '', corrected: false };
+            let e = String(raw).trim();
+            e = e.replace(/\s+/g, '').toLowerCase();
+            e = e.replace(/\(at\)/g, '@').replace(/\[at\]/g, '@');
+            if (!e.includes('@')) return { email: '', corrected: false };
+            const parts = e.split('@');
+            if (parts.length !== 2) return { email: '', corrected: false };
+            const [local, domainRaw] = parts;
+            if (!local) return { email: '', corrected: false };
+            const { domain, corrected } = fixEmailDomain(domainRaw);
+            return { email: `${local}@${domain}`, corrected };
+        }
+
+        function cleanProduct(value) {
+            if (!value || value === '' || value === null || value === undefined) return '';
+            const trimmed = String(value).trim();
+            if (!trimmed) return '';
+            
+            if (trimmed.includes(';')) {
+                const parts = trimmed.split(';').map(p => p.trim()).filter(p => p !== '');
+                if (parts.length > 0) {
+                    addDebugLog(`🔄 Product formatted: "${trimmed}" → "${parts.join(', ')}"`, 'success');
+                    return parts.join(', ');
+                }
+            }
+            
+            return trimmed;
+        }
+
+        function cleanReference(value) {
+            if (!value || value === '' || value === null || value === undefined) return '-';
+            const trimmed = String(value).trim().toUpperCase();
+            const naPatterns = ['#NA', 'NA', 'N/A', '#N/A', 'NIL', 'NONE', 'BLANK', 'NULL', '-', '--', 'EMPTY'];
+            if (naPatterns.includes(trimmed)) {
+                addDebugLog(`✅ Reference cleaned: "${value}" → "-"`, 'success');
+                return '-';
+            }
+            return String(value).trim();
+        }
+
+        function getValue(row, keys) {
+            for (const k of keys) {
+                if (row[k] && row[k].trim() !== '') {
+                    return row[k];
+                }
+            }
+            return '';
+        }
+
+        function cleanPhoneNumber(phone) {
+            if (!phone) return null;
+            if (phone.includes('E') || phone.includes('e')) {
+                try { phone = parseFloat(phone).toString(); } catch { return null; }
+            }
+            const digits = phone.replace(/\D/g, '');
+            if (digits.length < 10) return null;
+            const last10 = digits.slice(-10);
+            return '+91-' + last10.slice(0, 5) + '-' + last10.slice(5);
+        }
+
+        function cleanData(rows) {
+            const cleaned = [];
+            let skipped = 0;
+
+            rows.forEach(row => {
+                const name = getValue(row, ['full name','full_name','name','exhibitor name','company name','organisation name']);
+                let phone = getValue(row, ['contact number','contact_number','phone','mobile','phone number','contact','telephone']);
+                const city = getValue(row, ['city / state','city/state','city','location','state','city/country']);
+                
+                const productRaw = getValue(row, ['interested in','interested_in','what product','product interested']);
+                const product = cleanProduct(productRaw);
+                
+                const categoryRaw = getValue(row, ['category','product','type','industry','segment','interested in','what are you interested in']);
+                
+                const referenceRaw = getValue(row, ['if any referance','if any reference','reference in']);
+                const reference = cleanReference(referenceRaw);
+                
+                const whoYouAre = getValue(row, ['who you are?','who you are','identify','who_you_are']);
+                const emailRaw = getValue(row, ['email','e-mail','mail','email id','email_id','work email','business email']);
+
+                if (!name || !phone) { skipped++; return; }
+                phone = cleanPhoneNumber(phone);
+                if (!phone) { skipped++; return; }
+
+                let emailInfo = { email: '', corrected: false };
+                if (emailRaw && emailRaw.trim() !== '') {
+                    emailInfo = normalizeEmail(emailRaw);
+                    if (emailInfo.email && emailInfo.corrected) {
+                        addDebugLog(`✉️ Email domain auto-corrected → ${emailInfo.email}`, 'success');
+                    }
+                }
+
+                cleaned.push({
+                    full_name: name.trim(),
+                    phone_number: phone,
+                    email: emailInfo.email || '',
+                    product: product || '',
+                    city: city ? city.trim() : '',
+                    who_you_are: whoYouAre.trim(),
+                    category: categoryRaw.trim() || '',
+                    reference: reference || '-',
+                    source: emailInfo.corrected ? 'Upload (email domain corrected)' : 'Upload'
+                });
+            });
+
+            if (skipped > 0) addDebugLog('Skipped: ' + skipped + ' (invalid data)', 'warning');
+            return cleaned;
+        }
+
+        function filterDuplicates(leads) {
+            const fresh = [];
+            let blocked = 0;
+            leads.forEach(l => {
+                const byPhone = registeredPhones.has(l.phone_number);
+                const emailOk = l.email && l.email !== '';
+                const byEmail = emailOk && registeredEmails.has(l.email);
+                
+                if (byPhone || byEmail) {
+                    blocked++;
+                    if (byPhone) addDebugLog(`🚫 Blocked: Phone exists - ${l.phone_number}`, 'warning');
+                    if (byEmail) addDebugLog(`🚫 Blocked: Email exists - ${l.email}`, 'warning');
+                } else {
+                    fresh.push(l);
+                    registeredPhones.add(l.phone_number);
+                    if (emailOk) registeredEmails.add(l.email);
+                }
+            });
+            return { new: fresh, blocked };
+        }
+
+        function determineAssignment(city, segment) {
+    if (!city) city = '';
+    if (!segment) segment = '';
+
+    const c = city.toLowerCase();
+    const s = segment.toLowerCase();
+
+    if (c.includes('pune') || c.includes('dharashiv')) {
+        if (s.includes('hot'))  return 'Onkar';
+        if (s.includes('warm') || s.includes('cold')) return 'Goraksha';
+        return 'Onkar';
+    }
+
+    if (c.includes('ahmedabad') || c.includes('jalgaon') || c.includes('dhulia')) {
+        if (s.includes('hot'))  return 'Sachin';
+        if (s.includes('warm') || s.includes('cold')) return 'Rajesh';
+        return 'Sachin';
+    }
+
+    return '';
+}
+        function addLeadsToDatabase(newLeads) {
+    const mapped = newLeads.map((l, index) => {
+        const leadId = 'L' + (allLeads.length + index + 1).toString().padStart(4, '0');
+
+        const seg = l.segment && l.segment !== '' ? l.segment : determineSegment(l.city);
+        const autoAssignTo = l.assign_to && l.assign_to !== ''
+            ? l.assign_to
+            : determineAssignment(l.city, seg);
+
+        return {
+            lead_id: leadId,
+            full_name: l.full_name || '',
+            phone_number: l.phone_number || '',
+            email: l.email || '',
+            product: l.product || '',
+            city: l.city || '',
+            who_you_are: l.who_you_are || '',
+            category: l.category || '',
+            reference: l.reference || '-',
+            source: l.source || 'Upload',
+            segment: seg,
+            assign_to: autoAssignTo,
+            status: l.status || (autoAssignTo ? 'Assigned' : 'Lead Collected'),
+            campaign_enabled: l.campaign_enabled || 'No',
+            date_added: l.date_added || new Date().toISOString().split('T')[0]
+        };
+    });
+
+    allLeads = allLeads.concat(mapped);
+    saveData();
+    addDebugLog('Added ' + newLeads.length + ' new leads', 'success');  // ← yahan rakhna
+}
+        function renderTable(leads) {
+            const tb = document.getElementById('tableBody');
+            if (!leads.length) {
+                tb.innerHTML = '<tr><td colspan="14"><div class="empty-state">📁 No leads.</div></td></tr>';
+                return;
+            }
+            tb.innerHTML = leads.map(l => {
+                const whoYouAre = l.who_you_are || '';
+                return `
+                <tr>
+                    <td><strong>${l.lead_id || ''}</strong></td>
+                    <td>${l.full_name || ''}</td>
+                    <td><span style="font-family:monospace;font-size:10px;">${l.phone_number || ''}</span></td>
+                    <td>${l.email || ''}</td>
+                    <td>${l.product || ''}</td>
+                    <td>${l.city || ''}</td>
+                    <td><span class="badge">${whoYouAre}</span></td>
+                    <td>${l.reference || '-'}</td>
+                    <td>
+                        <select onchange="updateField('${l.lead_id}','category',this.value)">
+                            <option value="">Select</option>
+                            <option value="Request Call Back" ${l.category === 'Request Call Back' ? 'selected':''}>Request Call Back</option>
+                            <option value="Meet Senior Person" ${l.category === 'Meet Senior Person' ? 'selected':''}>Meet Senior Person</option>
+                            <option value="Interested in Quote" ${l.category === 'Interested in Quote' ? 'selected':''}>Interested in Quote</option>
+                            <option value="Send Product Details" ${l.category === 'Send Product Details' ? 'selected':''}>Send Product Details</option>
+                            <option value="Requesting Demo" ${l.category === 'Requesting Demo' ? 'selected':''}>Requesting Demo</option>
+                        </select>
+                    </td>
+                    <td><span class="badge">${l.segment || ''}</span></td>
+                    <td>
+                        <select onchange="updateField('${l.lead_id}','assign_to',this.value)">
+                            <option value="">Unassigned</option>
+                            <option value="Onkar" ${l.assign_to === 'Onkar' ? 'selected':''}>Onkar</option>
+                            <option value="Goraksha" ${l.assign_to === 'Goraksha' ? 'selected':''}>Goraksha</option>
+                            <option value="Sachin" ${l.assign_to === 'Sachin' ? 'selected':''}>Sachin</option>
+                            <option value="Rajesh" ${l.assign_to === 'Rajesh' ? 'selected':''}>Rajesh</option>
+                        </select>
+                    </td>
+                    <td>
+                        <select onchange="updateField('${l.lead_id}','status',this.value)">
+                            <option value="Lead Collected" ${l.status === 'Lead Collected' ? 'selected':''}>Lead Collected</option>
+                            <option value="Assigned" ${l.status === 'Assigned' ? 'selected':''}>Assigned</option>
+                            <option value="Qualified" ${l.status === 'Qualified' ? 'selected':''}>Qualified</option>
+                            <option value="Converted" ${l.status === 'Converted' ? 'selected':''}>Converted</option>
+                        </select>
+                    </td>
+                    <td>
+                        <select onchange="updateField('${l.lead_id}','campaign_enabled',this.value)">
+                            <option value="No" ${l.campaign_enabled === 'No' ? 'selected':''}>No</option>
+                            <option value="Yes" ${l.campaign_enabled === 'Yes' ? 'selected':''}>Yes</option>
+                        </select>
+                    </td>
+                    <td>
+                <!-- Delete disabled to keep data permanent -->
+                <!-- <button class="btn-danger" onclick="deleteLead('${l.lead_id}')">🗑️</button> -->
+                </td>
+                </tr>
+            `;
+            }).join('');
+        }
+
+        function updateField(leadId, field, val) {
+    const l = allLeads.find(x => x.lead_id === leadId);
+    if (!l) return;
+
+    l[field] = val;
+    saveData();
+
+    // 🔹 Admin = sab, Team member = sirf apne leads
+    let baseLeads = allLeads;
+    if (!currentUser.isAdmin) {
+        baseLeads = allLeads.filter(x => x.assign_to === currentUser.displayName);
+    }
+
+    renderTable(baseLeads);
+    updateMetrics(baseLeads);
+    updateAssignedPeopleSection(baseLeads);
+
+    addDebugLog('Updated ' + leadId + ' - ' + field, 'success');
+}
+
+        function deleteLead(leadId) {
+            if (!confirm('Delete lead?')) return;
+            const idx = allLeads.findIndex(x => x.lead_id === leadId);
+            if (idx === -1) return;
+            const phone = allLeads[idx].phone_number;
+            const email = allLeads[idx].email;
+            allLeads.splice(idx, 1);
+        registeredPhones.delete(phone);
+        if (email && email !== '') registeredEmails.delete(email);
+        saveData();
+        refreshView();
+        addDebugLog('Lead deleted', 'success');
+
+        }
+
+        function applyFilters() {
+    const name = document.getElementById('searchName').value.toLowerCase();
+    const cat = document.getElementById('filterCategory').value;
+    const seg = document.getElementById('filterSegment').value;
+    const assignToFilter = document.getElementById('filterAssignTo').value;
+    const st  = document.getElementById('filterStatus').value;
+
+    let baseLeads = allLeads;
+    if (!currentUser.isAdmin) {
+        baseLeads = allLeads.filter(l => l.assign_to === currentUser.displayName);
+    }
+
+    const filtered = baseLeads.filter(l =>
+        (name === '' || (l.full_name || '').toLowerCase().includes(name)) &&
+        (cat === '' || l.category === cat) &&
+        (seg === '' || l.segment === seg) &&
+        (assignToFilter === '' || l.assign_to === assignToFilter) &&
+        (st === '' || l.status === st)
+    );
+
+    renderTable(filtered);
+    updateMetrics(filtered);
+    updateAssignedPeopleSection(filtered);
+    addDebugLog('Filter: ' + filtered.length + '/' + baseLeads.length, 'info');
+}
+
+        function clearFilters() {
+    document.getElementById('searchName').value = '';
+    document.getElementById('filterCategory').value = '';
+    document.getElementById('filterSegment').value = '';
+    document.getElementById('filterAssignTo').value = '';
+    document.getElementById('filterStatus').value = '';
+
+    let visibleLeads = allLeads;
+    if (!currentUser.isAdmin) {
+        visibleLeads = allLeads.filter(l => l.assign_to === currentUser.displayName);
+    }
+
+    refreshView();
+    addDebugLog('Filters cleared', 'info');
+}
+
+        function updateMetrics(baseLeads = allLeads) {
+    const total = baseLeads.length;
+    const assigned = baseLeads.filter(l => l.assign_to && l.assign_to !== '').length;
+    const qualified = baseLeads.filter(l => l.status === 'Qualified' || l.status === 'Converted').length;
+    const campaign = baseLeads.filter(l => l.campaign_enabled === 'Yes').length;
+
+    document.getElementById('kpiTotal').textContent = total;
+    document.getElementById('kpiAssigned').textContent = assigned;
+    document.getElementById('kpiQualified').textContent = qualified;
+    document.getElementById('kpiCampaign').textContent = campaign;
+
+    // Sidebar DB total – current view ke hisaab se
+    document.getElementById('sidebarTotalLeads').textContent = total;
+}
+
+        function updateAssignedPeopleSection(baseLeads = allLeads) {
+    const cont = document.getElementById('assignedPeopleContainer');
+    const stats = {};
+    TEAM_MEMBERS.forEach(n => stats[n] = { count: 0, qualified: 0 });
+
+    baseLeads.forEach(l => {
+        if (l.assign_to && l.assign_to !== '' && stats[l.assign_to]) {
+            stats[l.assign_to].count++;
+            if (l.status === 'Qualified' || l.status === 'Converted') {
+                stats[l.assign_to].qualified++;
+            }
+        }
+    });
+
+    let html = '';
+
+    if (currentUser.isAdmin) {
+        // 🔹 Admin ko sab members ka summary
+        TEAM_MEMBERS.forEach(n => {
+            if (stats[n].count > 0) {
+                html += `
+                    <div class="assigned-person">
+                        <div class="assigned-person-name">👤 ${n}</div>
+                        <div class="assigned-stats">
+                            <div class="stat-item"><span>Leads:</span><span>${stats[n].count}</span></div>
+                            <div class="stat-item"><span>Qualified:</span><span>${stats[n].qualified}</span></div>
+                        </div>
+                    </div>`;
+            }
+        });
+    } else {
+        // 🔹 Team member ko sirf apna box
+        const me = currentUser.displayName;
+        const my = stats[me] || { count: 0, qualified: 0 };
+        html = `
+            <div class="assigned-person">
+                <div class="assigned-person-name">👤 ${me}</div>
+                <div class="assigned-stats">
+                    <div class="stat-item"><span>Leads:</span><span>${my.count}</span></div>
+                    <div class="stat-item"><span>Qualified:</span><span>${my.qualified}</span></div>
+                </div>
+            </div>`;
+    }
+
+    cont.innerHTML = html || '<div style="font-size:11px;color:var(--text-soft);text-align:center;">No assignments</div>';
+}
+
+        function showMessage(text, type) {
+            const c = document.getElementById('messageContainer');
+            const div = document.createElement('div');
+            div.className = 'message message-' + type + ' show';
+            div.textContent = text;
+            c.appendChild(div);
+            setTimeout(() => div.remove(), 5000);
+        }
+        function toggleSidebar() {
+  document.querySelector('.sidebar').classList.toggle('open');
+}
+        function refreshView() {
+    let baseLeads = allLeads;
+    if (!currentUser.isAdmin) {
+        baseLeads = allLeads.filter(l => l.assign_to === currentUser.displayName);
+    }
+    renderTable(baseLeads);
+    updateMetrics(baseLeads);
+    updateAssignedPeopleSection(baseLeads);
+}
+    </script>
+</body>
+</html>
+
 
 
 
