@@ -954,38 +954,59 @@
             return 'Maharashtra';
         }
 
-        function determineAssignment(city) {
-            if (!city || city === '') return '';
-            const c = city.toLowerCase();
-            if (c.includes('pune') || c.includes('dharashiv')) {
-                return Math.random() > 0.5 ? 'Onkar' : 'Goraksha';
-            }
-            return '';
-        }
+       // CITY + SEGMENT BASED AUTO ASSIGNMENT
+function determineAssignment(city, segment) {
+    if (!city) city = '';
+    if (!segment) segment = '';
 
-        function addLeadsToDatabase(leads) {
-            const newLeads = leads.map((l, idx) => {
-                const leadId = 'LEAD-' + String(allLeads.length + idx + 1).padStart(4, '0');
-                return {
-                    lead_id: leadId,
-                    full_name: l.full_name || '',
-                    phone_number: l.phone_number || '',
-                    email: l.email || '',
-                    product: l.product || '',
-                    city: l.city || '',
-                    who_you_are: l.who_you_are || '',
-                    category: l.category || '',
-                    reference: l.reference || '-',
-                    source: l.source || 'Upload',
-                    segment: determineSegment(l.city),
-                    assign_to: determineAssignment(l.city),
-                    status: 'Lead Collected',
-                    campaign_enabled: 'No',
-                    date_added: new Date().toISOString().split('T')[0]
-                };
-            });
-            allLeads.push(...newLeads);
-            saveData();
+    const c = city.toLowerCase();
+    const s = segment.toLowerCase();
+
+    if (c.includes('pune') || c.includes('dharashiv')) {
+        if (s.includes('hot'))  return 'Onkar';
+        if (s.includes('warm') || s.includes('cold')) return 'Goraksha';
+        return 'Onkar';
+    }
+
+    if (c.includes('ahmedabad') || c.includes('jalgaon') || c.includes('dhulia')) {
+        if (s.includes('hot'))  return 'Sachin';
+        if (s.includes('warm') || s.includes('cold')) return 'Rajesh';
+        return 'Sachin';
+    }
+
+    return '';
+}
+        function addLeadsToDatabase(newLeads) {
+    const mapped = newLeads.map((l, index) => {
+        const leadId = 'L' + (allLeads.length + index + 1).toString().padStart(4, '0');
+
+        const seg = l.segment && l.segment !== '' ? l.segment : determineSegment(l.city);
+        const autoAssignTo = l.assign_to && l.assign_to !== ''
+            ? l.assign_to
+            : determineAssignment(l.city, seg);
+
+        return {
+            lead_id: leadId,
+            full_name: l.full_name || '',
+            phone_number: l.phone_number || '',
+            email: l.email || '',
+            product: l.product || '',
+            city: l.city || '',
+            who_you_are: l.who_you_are || '',
+            category: l.category || '',
+            reference: l.reference || '-',
+            source: l.source || 'Upload',
+            segment: seg,
+            assign_to: autoAssignTo,
+            status: l.status || (autoAssignTo ? 'Assigned' : 'Lead Collected'),
+            campaign_enabled: l.campaign_enabled || 'No',
+            date_added: l.date_added || new Date().toISOString().split('T')[0]
+        };
+    });
+
+    allLeads = allLeads.concat(mapped);
+    saveData();
+}
             addDebugLog('Added ' + newLeads.length + ' new leads', 'success');
         }
 
@@ -1154,4 +1175,5 @@
     </script>
 </body>
 </html>
+
 
