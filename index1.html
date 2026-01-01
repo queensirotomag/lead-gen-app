@@ -560,16 +560,15 @@
     loadData();
     buildPhoneRegistry();
 
-    let visibleLeads = allLeads;
-
-    // 👉 Team member ko sirf apne leads
+    // 🔹 Admin = sab, Team member = sirf apne leads
+    let baseLeads = allLeads;
     if (!currentUser.isAdmin) {
-        visibleLeads = allLeads.filter(l => l.assign_to === currentUser.displayName);
+        baseLeads = allLeads.filter(l => l.assign_to === currentUser.displayName);
     }
 
-    renderTable(visibleLeads);
-    updateMetrics();
-    updateAssignedPeopleSection();
+    renderTable(baseLeads);
+    updateMetrics(baseLeads);
+    updateAssignedPeopleSection(baseLeads);
     addDebugLog('✅ Dashboard ready for ' + currentUser.displayName, 'success');
 }
 
@@ -1071,12 +1070,9 @@
             const l = allLeads.find(x => x.lead_id === leadId);
             if (!l) return;
             l[field] = val;
-            saveData();
-            renderTable(allLeads);
-            updateMetrics();
-            updateAssignedPeopleSection();
-            addDebugLog('Updated ' + leadId + ' - ' + field, 'success');
-        }
+        saveData();
+        refreshView();
+        addDebugLog('Updated ' + leadId + ' - ' + field, 'success');
 
         function deleteLead(leadId) {
             if (!confirm('Delete lead?')) return;
@@ -1085,13 +1081,12 @@
             const phone = allLeads[idx].phone_number;
             const email = allLeads[idx].email;
             allLeads.splice(idx, 1);
-            registeredPhones.delete(phone);
-            if (email && email !== '') registeredEmails.delete(email);
-            saveData();
-            renderTable(allLeads);
-            updateMetrics();
-            updateAssignedPeopleSection();
-            addDebugLog('Lead deleted', 'success');
+        registeredPhones.delete(phone);
+        if (email && email !== '') registeredEmails.delete(email);
+        saveData();
+        refreshView();
+        addDebugLog('Lead deleted', 'success');
+
         }
 
         function applyFilters() {
@@ -1102,8 +1097,6 @@
     const st  = document.getElementById('filterStatus').value;
 
     let baseLeads = allLeads;
-
-    // 👉 Non-admin ke liye base set sirf uske leads
     if (!currentUser.isAdmin) {
         baseLeads = allLeads.filter(l => l.assign_to === currentUser.displayName);
     }
@@ -1117,6 +1110,8 @@
     );
 
     renderTable(filtered);
+    updateMetrics(filtered);
+    updateAssignedPeopleSection(filtered);
     addDebugLog('Filter: ' + filtered.length + '/' + baseLeads.length, 'info');
 }
 
@@ -1132,45 +1127,71 @@
         visibleLeads = allLeads.filter(l => l.assign_to === currentUser.displayName);
     }
 
-    renderTable(visibleLeads);
+    refreshView();
     addDebugLog('Filters cleared', 'info');
 }
 
-        function updateMetrics() {
-            document.getElementById('kpiTotal').textContent = allLeads.length;
-            document.getElementById('kpiAssigned').textContent = allLeads.filter(l => l.assign_to && l.assign_to !== '').length;
-            document.getElementById('kpiQualified').textContent = allLeads.filter(l => l.status === 'Qualified' || l.status === 'Converted').length;
-            document.getElementById('kpiCampaign').textContent = allLeads.filter(l => l.campaign_enabled === 'Yes').length;
-            document.getElementById('sidebarTotalLeads').textContent = allLeads.length;
-        }
+        function updateMetrics(baseLeads = allLeads) {
+    const total = baseLeads.length;
+    const assigned = baseLeads.filter(l => l.assign_to && l.assign_to !== '').length;
+    const qualified = baseLeads.filter(l => l.status === 'Qualified' || l.status === 'Converted').length;
+    const campaign = baseLeads.filter(l => l.campaign_enabled === 'Yes').length;
 
-        function updateAssignedPeopleSection() {
-            const cont = document.getElementById('assignedPeopleContainer');
-            const stats = {};
-            TEAM_MEMBERS.forEach(n => stats[n] = { count: 0, qualified: 0 });
-            allLeads.forEach(l => {
-                if (l.assign_to && l.assign_to !== '' && stats[l.assign_to]) {
-                    stats[l.assign_to].count++;
-                    if (l.status === 'Qualified' || l.status === 'Converted') {
-                        stats[l.assign_to].qualified++;
-                    }
-                }
-            });
-            let html = '';
-            TEAM_MEMBERS.forEach(n => {
-                if (stats[n].count > 0) {
-                    html += `
-                        <div class="assigned-person">
-                            <div class="assigned-person-name">👤 ${n}</div>
-                            <div class="assigned-stats">
-                                <div class="stat-item"><span>Leads:</span><span>${stats[n].count}</span></div>
-                                <div class="stat-item"><span>Qualified:</span><span>${stats[n].qualified}</span></div>
-                            </div>
-                        </div>`;
-                }
-            });
-            cont.innerHTML = html || '<div style="font-size:11px;color:var(--text-soft);text-align:center;">No assignments</div>';
+    document.getElementById('kpiTotal').textContent = total;
+    document.getElementById('kpiAssigned').textContent = assigned;
+    document.getElementById('kpiQualified').textContent = qualified;
+    document.getElementById('kpiCampaign').textContent = campaign;
+
+    // Sidebar DB total – current view ke hisaab se
+    document.getElementById('sidebarTotalLeads').textContent = total;
+}
+
+        function updateAssignedPeopleSection(baseLeads = allLeads) {
+    const cont = document.getElementById('assignedPeopleContainer');
+    const stats = {};
+    TEAM_MEMBERS.forEach(n => stats[n] = { count: 0, qualified: 0 });
+
+    baseLeads.forEach(l => {
+        if (l.assign_to && l.assign_to !== '' && stats[l.assign_to]) {
+            stats[l.assign_to].count++;
+            if (l.status === 'Qualified' || l.status === 'Converted') {
+                stats[l.assign_to].qualified++;
+            }
         }
+    });
+
+    let html = '';
+
+    if (currentUser.isAdmin) {
+        // 🔹 Admin ko sab members ka summary
+        TEAM_MEMBERS.forEach(n => {
+            if (stats[n].count > 0) {
+                html += `
+                    <div class="assigned-person">
+                        <div class="assigned-person-name">👤 ${n}</div>
+                        <div class="assigned-stats">
+                            <div class="stat-item"><span>Leads:</span><span>${stats[n].count}</span></div>
+                            <div class="stat-item"><span>Qualified:</span><span>${stats[n].qualified}</span></div>
+                        </div>
+                    </div>`;
+            }
+        });
+    } else {
+        // 🔹 Team member ko sirf apna box
+        const me = currentUser.displayName;
+        const my = stats[me] || { count: 0, qualified: 0 };
+        html = `
+            <div class="assigned-person">
+                <div class="assigned-person-name">👤 ${me}</div>
+                <div class="assigned-stats">
+                    <div class="stat-item"><span>Leads:</span><span>${my.count}</span></div>
+                    <div class="stat-item"><span>Qualified:</span><span>${my.qualified}</span></div>
+                </div>
+            </div>`;
+    }
+
+    cont.innerHTML = html || '<div style="font-size:11px;color:var(--text-soft);text-align:center;">No assignments</div>';
+}
 
         function showMessage(text, type) {
             const c = document.getElementById('messageContainer');
@@ -1183,9 +1204,19 @@
         function toggleSidebar() {
   document.querySelector('.sidebar').classList.toggle('open');
 }
+        function refreshView() {
+    let baseLeads = allLeads;
+    if (!currentUser.isAdmin) {
+        baseLeads = allLeads.filter(l => l.assign_to === currentUser.displayName);
+    }
+    renderTable(baseLeads);
+    updateMetrics(baseLeads);
+    updateAssignedPeopleSection(baseLeads);
+}
     </script>
 </body>
 </html>
+
 
 
 
