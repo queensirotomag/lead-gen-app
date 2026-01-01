@@ -733,7 +733,6 @@
                 document.getElementById('processBtn').disabled = false;
             }
         }
-
         function parseCSV(text) {
             const lines = text.trim().split('\n');
             if (lines.length < 2) return [];
@@ -945,17 +944,7 @@
             return { new: fresh, blocked };
         }
 
-        function determineSegment(city) {
-            if (!city || city === '') return 'Maharashtra';
-            const c = city.toLowerCase();
-            if (c.includes('pune') || c.includes('dharashiv')) return 'Pune';
-            if (c.includes('ahmedabad') || c.includes('jalgaon') || c.includes('dhulia')) return 'Ahmedabad';
-            if (c.includes('bangalore')) return 'Bangalore';
-            return 'Maharashtra';
-        }
-
-       // CITY + SEGMENT BASED AUTO ASSIGNMENT
-function determineAssignment(city, segment) {
+        function determineAssignment(city, segment) {
     if (!city) city = '';
     if (!segment) segment = '';
 
@@ -1006,10 +995,8 @@ function determineAssignment(city, segment) {
 
     allLeads = allLeads.concat(mapped);
     saveData();
+    addDebugLog('Added ' + newLeads.length + ' new leads', 'success');  // ← yahan rakhna
 }
-            addDebugLog('Added ' + newLeads.length + ' new leads', 'success');
-        }
-
         function renderTable(leads) {
             const tb = document.getElementById('tableBody');
             if (!leads.length) {
@@ -1063,8 +1050,9 @@ function determineAssignment(city, segment) {
                         </select>
                     </td>
                     <td>
-                        <button class="btn-danger" onclick="deleteLead('${l.lead_id}')">🗑️</button>
-                    </td>
+                <!-- Delete disabled to keep data permanent -->
+                <!-- <button class="btn-danger" onclick="deleteLead('${l.lead_id}')">🗑️</button> -->
+                </td>
                 </tr>
             `;
             }).join('');
@@ -1175,6 +1163,7 @@ function determineAssignment(city, segment) {
     </script>
 </body>
 </html>
+
 
 
 
