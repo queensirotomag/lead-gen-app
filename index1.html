@@ -505,7 +505,6 @@
         </div>
     </div>
 <script type="module">
-  // Modular Firebase SDK (CDN) - includes Firestore
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
   import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-analytics.js";
   import {
@@ -521,7 +520,7 @@
     doc
   } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
-  // ====== Firebase config (aapne diya) ======
+  // ====== AAPKA firebaseConfig (jo aap ne already diya) ======
   const firebaseConfig = {
     apiKey: "AIzaSyDRWxWZkfzdZZJMHLXaF5DXGiGLaExISaI",
     authDomain: "lead-gen-app-c42ab.firebaseapp.com",
@@ -531,21 +530,20 @@
     appId: "1:318790357836:web:62258a1d9ca6b7ee3635e9",
     measurementId: "G-5EK8DBLV58"
   };
-  // ===========================================
+  // ==========================================================
 
-  // Initialize Firebase + Firestore
   try {
     const app = initializeApp(firebaseConfig);
-    try { getAnalytics(app); } catch(e) { /* ignore analytics when serving locally */ }
+    try { getAnalytics(app); } catch(e) { /* ignore analytics errors locally */ }
     const db = getFirestore(app);
-    window._cdlm_db = db; // global handle
+    window._cdlm_db = db;
     if (typeof addDebugLog === 'function') addDebugLog('✅ Firebase initialized', 'success');
   } catch (err) {
     console.error('Firebase init error:', err);
     if (typeof addDebugLog === 'function') addDebugLog('Firebase init error: ' + (err.message || err), 'error');
   }
 
-  // Realtime listener for 'leads' collection
+  // Realtime listener
   (function setupRealtime() {
     const db = window._cdlm_db;
     if (!db) return;
@@ -562,7 +560,7 @@
     });
   })();
 
-  // Save array of new leads to Firestore (call this from processCSV)
+  // Function to write leads to Firestore
   window.addLeadsToFirestore = async function(newLeads) {
     const db = window._cdlm_db;
     if (!db) {
@@ -572,10 +570,7 @@
     if (!newLeads || newLeads.length === 0) return;
     try {
       for (const l of newLeads) {
-        const payload = {
-          ...l,
-          date_added: l.date_added || new Date().toISOString().split('T')[0]
-        };
+        const payload = { ...l, date_added: l.date_added || new Date().toISOString().split('T')[0] };
         await addDoc(collection(db, 'leads'), payload);
       }
       if (typeof addDebugLog === 'function') addDebugLog('✅ Saved ' + newLeads.length + ' leads to Firestore', 'success');
@@ -585,19 +580,16 @@
     }
   };
 
-  // Delete lead by doc id or lead_id
+  // Optional delete helper
   window.deleteLeadFromFirestore = async function(idOrLeadId) {
     const db = window._cdlm_db;
     if (!db) return;
     try {
-      // try delete by document id first
       try {
         await deleteDoc(doc(collection(db,'leads'), idOrLeadId));
         if (typeof addDebugLog === 'function') addDebugLog('🗑️ Deleted lead (doc id)', 'success');
         return;
-      } catch(e) { /* not a doc id, continue */ }
-
-      // else find by lead_id field
+      } catch(_) {}
       const q = query(collection(db, 'leads'), where('lead_id', '==', idOrLeadId));
       const snaps = await getDocs(q);
       snaps.forEach(async d => {
@@ -609,6 +601,28 @@
       if (typeof addDebugLog === 'function') addDebugLog('Delete error: ' + (e.message || e), 'error');
     }
   };
+
+  // Patch addLeadsToDatabase so you don't need to change existing code
+  (function patchAddLeadsWhenReady() {
+    let tries = 0;
+    const timer = setInterval(async () => {
+      tries++;
+      if (typeof window.addLeadsToDatabase === 'function') {
+        const orig = window.addLeadsToDatabase;
+        window.addLeadsToDatabase = async function(newLeads) {
+          try { orig.call(this, newLeads); } catch(e) { console.error('orig addLeadsToDatabase err', e); }
+          if (typeof window.addLeadsToFirestore === 'function' && window._cdlm_db) {
+            try { await window.addLeadsToFirestore(newLeads); } catch(e) { console.error('addLeadsToFirestore error', e); }
+          }
+        };
+        clearInterval(timer);
+        if (typeof addDebugLog === 'function') addDebugLog('🔧 addLeadsToDatabase patched to also write to Firestore', 'success');
+      } else if (tries > 30) {
+        clearInterval(timer);
+        if (typeof addDebugLog === 'function') addDebugLog('⚠️ addLeadsToDatabase not found to patch (timeout)', 'warning');
+      }
+    }, 300);
+  })();
 </script>
     <script>
         const USERS = {
@@ -2589,6 +2603,7 @@
     </script>
 </body>
 </html>
+
 
 
 
