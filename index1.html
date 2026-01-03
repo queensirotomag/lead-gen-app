@@ -724,7 +724,7 @@
                         </div>
                         <div class="user-actions">
                             <button class="btn-edit" onclick="editUser('${u}')">✏️ Edit</button>
-                            <button class="btn-delete" onclick="deleteUser('${u}')" ${u === 'admin' ? 'disabled' : ''}>🗑️ Delete</button>
+                            <button class="btn-" onclick="User('${u}')" ${u === 'admin' ? 'disabled' : ''}>🗑️ </button>
                         </div>
                     </div>
                 `;
@@ -741,12 +741,12 @@
             }
         }
 
-        function deleteUser(u) {
-            if (u === 'admin') { alert('Cannot delete admin user'); return; }
-            if (confirm('Delete user: ' + u + '?')) {
-                delete USERS[u];
+        function User(u) {
+            if (u === 'admin') { alert('Cannot  admin user'); return; }
+            if (confirm(' user: ' + u + '?')) {
+                 USERS[u];
                 updateUsersList();
-                addDebugLog('🗑️ User deleted', 'success');
+                addDebugLog('🗑️ User d', 'success');
             }
         }
 
@@ -1185,10 +1185,7 @@
                             <option value="Yes" ${l.campaign_enabled === 'Yes' ? 'selected':''}>Yes</option>
                         </select>
                     </td>
-                    <td>
-                <!-- Delete disabled to keep data permanent -->
-                <!-- <button class="btn-danger" onclick="deleteLead('${l.lead_id}')">🗑️</button> -->
-                </td>
+                    <td><button class="btn-delete" { background: #dc3545; color: white; border: none; padding: 4px 8px; cursor: pointer; } onclick="deleteLead('unique-lead-id')">Delete</button></td>
                 </tr>
             `;
             }).join('');
@@ -1203,19 +1200,27 @@
         addDebugLog('Updated ' + leadId + ' - ' + field, 'success');
 
         function deleteLead(leadId) {
-            if (!confirm('Delete lead?')) return;
-            const idx = allLeads.findIndex(x => x.lead_id === leadId);
-            if (idx === -1) return;
-            const phone = allLeads[idx].phone_number;
-            const email = allLeads[idx].email;
-            allLeads.splice(idx, 1);
-        registeredPhones.delete(phone);
-        if (email && email !== '') registeredEmails.delete(email);
-        saveData();
-        refreshView();
-        addDebugLog('Lead deleted', 'success');
-
-        }
+    if (!confirm('Delete lead?')) return;
+    
+    const idx = allLeads.findIndex(x => x.lead_id === leadId);
+    if (idx === -1) {
+        addDebugLog('Lead not found for ID: ' + leadId, 'error');
+        return;
+    }
+    
+    const phone = allLeads[idx].phone_number;
+    const email = allLeads[idx].email;
+    
+    allLeads.splice(idx, 1);
+    registeredPhones.delete(phone);
+    if (email && email !== '') {
+        registeredEmails.delete(email);
+    }
+    
+    saveData();
+    refreshView();
+    addDebugLog('Lead deleted: ' + leadId, 'success');
+}
 
         function applyFilters() {
     const name = document.getElementById('searchName').value.toLowerCase();
