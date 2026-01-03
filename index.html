@@ -504,7 +504,126 @@
             </div>
         </div>
     </div>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-analytics.js";
+  import {
+    getFirestore,
+    collection,
+    query,
+    orderBy,
+    onSnapshot,
+    addDoc,
+    deleteDoc,
+    where,
+    getDocs,
+    doc
+  } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
+  // ====== AAPKA firebaseConfig (jo aap ne already diya) ======
+  const firebaseConfig = {
+    apiKey: "AIzaSyDRWxWZkfzdZZJMHLXaF5DXGiGLaExISaI",
+    authDomain: "lead-gen-app-c42ab.firebaseapp.com",
+    projectId: "lead-gen-app-c42ab",
+    storageBucket: "lead-gen-app-c42ab.firebasestorage.app",
+    messagingSenderId: "318790357836",
+    appId: "1:318790357836:web:62258a1d9ca6b7ee3635e9",
+    measurementId: "G-5EK8DBLV58"
+  };
+  // ==========================================================
+
+  try {
+    const app = initializeApp(firebaseConfig);
+    try { getAnalytics(app); } catch(e) { /* ignore analytics errors locally */ }
+    const db = getFirestore(app);
+    window._cdlm_db = db;
+    if (typeof addDebugLog === 'function') addDebugLog('✅ Firebase initialized', 'success');
+  } catch (err) {
+    console.error('Firebase init error:', err);
+    if (typeof addDebugLog === 'function') addDebugLog('Firebase init error: ' + (err.message || err), 'error');
+  }
+
+  // Realtime listener
+  (function setupRealtime() {
+    const db = window._cdlm_db;
+    if (!db) return;
+    const leadsCol = collection(db, 'leads');
+    const q = query(leadsCol, orderBy('date_added', 'asc'));
+    onSnapshot(q, snapshot => {
+      window.allLeads = snapshot.docs.map(d => ({ ...d.data(), _id: d.id }));
+      if (typeof buildPhoneRegistry === 'function') buildPhoneRegistry();
+      if (typeof renderForCurrentUser === 'function') renderForCurrentUser();
+      if (typeof addDebugLog === 'function') addDebugLog('🔁 Realtime: leads updated (' + window.allLeads.length + ')', 'info');
+    }, err => {
+      console.error('Realtime error:', err);
+      if (typeof addDebugLog === 'function') addDebugLog('Realtime error: ' + (err.message || err), 'error');
+    });
+  })();
+
+  // Function to write leads to Firestore
+  window.addLeadsToFirestore = async function(newLeads) {
+    const db = window._cdlm_db;
+    if (!db) {
+      if (typeof addDebugLog === 'function') addDebugLog('Firestore not initialized — cannot write', 'warning');
+      return;
+    }
+    if (!newLeads || newLeads.length === 0) return;
+    try {
+      for (const l of newLeads) {
+        const payload = { ...l, date_added: l.date_added || new Date().toISOString().split('T')[0] };
+        await addDoc(collection(db, 'leads'), payload);
+      }
+      if (typeof addDebugLog === 'function') addDebugLog('✅ Saved ' + newLeads.length + ' leads to Firestore', 'success');
+    } catch (e) {
+      console.error('Firestore write error:', e);
+      if (typeof addDebugLog === 'function') addDebugLog('Firestore write error: ' + (e.message || e), 'error');
+    }
+  };
+
+  // Optional delete helper
+  window.deleteLeadFromFirestore = async function(idOrLeadId) {
+    const db = window._cdlm_db;
+    if (!db) return;
+    try {
+      try {
+        await deleteDoc(doc(collection(db,'leads'), idOrLeadId));
+        if (typeof addDebugLog === 'function') addDebugLog('🗑️ Deleted lead (doc id)', 'success');
+        return;
+      } catch(_) {}
+      const q = query(collection(db, 'leads'), where('lead_id', '==', idOrLeadId));
+      const snaps = await getDocs(q);
+      snaps.forEach(async d => {
+        await deleteDoc(doc(collection(db,'leads'), d.id));
+      });
+      if (typeof addDebugLog === 'function') addDebugLog('🗑️ Deleted lead(s) by lead_id', 'success');
+    } catch (e) {
+      console.error('Delete error:', e);
+      if (typeof addDebugLog === 'function') addDebugLog('Delete error: ' + (e.message || e), 'error');
+    }
+  };
+
+  // Patch addLeadsToDatabase so you don't need to change existing code
+  (function patchAddLeadsWhenReady() {
+    let tries = 0;
+    const timer = setInterval(async () => {
+      tries++;
+      if (typeof window.addLeadsToDatabase === 'function') {
+        const orig = window.addLeadsToDatabase;
+        window.addLeadsToDatabase = async function(newLeads) {
+          try { orig.call(this, newLeads); } catch(e) { console.error('orig addLeadsToDatabase err', e); }
+          if (typeof window.addLeadsToFirestore === 'function' && window._cdlm_db) {
+            try { await window.addLeadsToFirestore(newLeads); } catch(e) { console.error('addLeadsToFirestore error', e); }
+          }
+        };
+        clearInterval(timer);
+        if (typeof addDebugLog === 'function') addDebugLog('🔧 addLeadsToDatabase patched to also write to Firestore', 'success');
+      } else if (tries > 30) {
+        clearInterval(timer);
+        if (typeof addDebugLog === 'function') addDebugLog('⚠️ addLeadsToDatabase not found to patch (timeout)', 'warning');
+      }
+    }, 300);
+  })();
+</script>
     <script>
         const USERS = {
             'admin':   { password: 'admin123',   displayName: 'Admin',   isAdmin: true  },
@@ -725,7 +844,16 @@
                 if (result.blocked > 0) {
                     addDebugLog('🚫 Blocked duplicates: ' + result.blocked, 'warning');
                 }
+                // Replace addLeadsToDatabase(result.new); with:
+            if (window._cdlm_db && typeof window.addLeadsToFirestore === 'function') {
+            // Firestore available — write to cloud
+            await window.addLeadsToFirestore(result.new);
+            // realtime listener will update UI automatically, but render immediately too:
+            if (typeof renderForCurrentUser === 'function') renderForCurrentUser();
+            } else {
+            // Fallback to local storage
                 addLeadsToDatabase(result.new);
+                }
                 renderTable(allLeads);
                 updateMetrics();
                 updateAssignedPeopleSection();
@@ -1729,7 +1857,29 @@
             </div>
         </div>
     </div>
+<script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-analytics.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
 
+  // Your web app's Firebase configuration
+  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+  const firebaseConfig = {
+    apiKey: "AIzaSyDRWxWZkfzdZZJMHLXaF5DXGiGLaExISaI",
+    authDomain: "lead-gen-app-c42ab.firebaseapp.com",
+    projectId: "lead-gen-app-c42ab",
+    storageBucket: "lead-gen-app-c42ab.firebasestorage.app",
+    messagingSenderId: "318790357836",
+    appId: "1:318790357836:web:62258a1d9ca6b7ee3635e9",
+    measurementId: "G-5EK8DBLV58"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+</script>
     <script>
         const USERS = {
             'admin':   { password: 'admin123',   displayName: 'Admin',   isAdmin: true  },
