@@ -1134,62 +1134,72 @@
     addDebugLog('Added ' + newLeads.length + ' new leads', 'success');  // ← yahan rakhna
 }
         function renderTable(leads) {
-            const tb = document.getElementById('tableBody');
-            if (!leads.length) {
-                tb.innerHTML = '<tr><td colspan="14"><div class="empty-state">📁 No leads.</div></td></tr>';
-                return;
-            }
-            tb.innerHTML = leads.map(l => {
-                const whoYouAre = l.who_you_are || '';
-                return `
-                <tr>
-                    <td><strong>${l.lead_id || ''}</strong></td>
-                    <td>${l.full_name || ''}</td>
-                    <td><span style="font-family:monospace;font-size:10px;">${l.phone_number || ''}</span></td>
-                    <td>${l.email || ''}</td>
-                    <td>${l.product || ''}</td>
-                    <td>${l.city || ''}</td>
-                    <td><span class="badge">${whoYouAre}</span></td>
-                    <td>${l.reference || '-'}</td>
-                    <td>
-                        <select onchange="updateField('${l.lead_id}','category',this.value)">
-                            <option value="">Select</option>
-                            <option value="Request Call Back" ${l.category === 'Request Call Back' ? 'selected':''}>Request Call Back</option>
-                            <option value="Meet Senior Person" ${l.category === 'Meet Senior Person' ? 'selected':''}>Meet Senior Person</option>
-                            <option value="Interested in Quote" ${l.category === 'Interested in Quote' ? 'selected':''}>Interested in Quote</option>
-                            <option value="Send Product Details" ${l.category === 'Send Product Details' ? 'selected':''}>Send Product Details</option>
-                            <option value="Requesting Demo" ${l.category === 'Requesting Demo' ? 'selected':''}>Requesting Demo</option>
-                        </select>
-                    </td>
-                    <td><span class="badge">${l.segment || ''}</span></td>
-                    <td>
-                        <select onchange="updateField('${l.lead_id}','assign_to',this.value)">
-                            <option value="">Unassigned</option>
-                            <option value="Onkar" ${l.assign_to === 'Onkar' ? 'selected':''}>Onkar</option>
-                            <option value="Goraksha" ${l.assign_to === 'Goraksha' ? 'selected':''}>Goraksha</option>
-                            <option value="Sachin" ${l.assign_to === 'Sachin' ? 'selected':''}>Sachin</option>
-                            <option value="Rajesh" ${l.assign_to === 'Rajesh' ? 'selected':''}>Rajesh</option>
-                        </select>
-                    </td>
-                    <td>
-                        <select onchange="updateField('${l.lead_id}','status',this.value)">
-                            <option value="Lead Collected" ${l.status === 'Lead Collected' ? 'selected':''}>Lead Collected</option>
-                            <option value="Assigned" ${l.status === 'Assigned' ? 'selected':''}>Assigned</option>
-                            <option value="Qualified" ${l.status === 'Qualified' ? 'selected':''}>Qualified</option>
-                            <option value="Converted" ${l.status === 'Converted' ? 'selected':''}>Converted</option>
-                        </select>
-                    </td>
-                    <td>
-                        <select onchange="updateField('${l.lead_id}','campaign_enabled',this.value)">
-                            <option value="No" ${l.campaign_enabled === 'No' ? 'selected':''}>No</option>
-                            <option value="Yes" ${l.campaign_enabled === 'Yes' ? 'selected':''}>Yes</option>
-                        </select>
-                    </td>
-                    <td><button class="btn-delete" { background: #dc3545; color: white; border: none; padding: 4px 8px; cursor: pointer; } onclick="deleteLead('unique-lead-id')">Delete</button></td>
-                </tr>
-            `;
-            }).join('');
-        }
+  const tb = document.getElementById('tableBody');
+  if (!leads.length) {
+    tb.innerHTML = `
+      <tr>
+        <td colspan="14">
+          <div class="empty-state">📁 No leads.</div>
+        </td>
+      </tr>`;
+    return;
+  }
+
+  tb.innerHTML = leads.map(l => {
+    const whoYouAre = l.whoyouare || '';
+    return `
+      <tr>
+        <td><strong>${l.leadid || ''}</strong></td>
+        <td>${l.fullname || ''}</td>
+        <td><span style="font-family:monospace;font-size:10px;">${l.phonenumber || ''}</span></td>
+        <td>${l.email || ''}</td>
+        <td>${l.product || ''}</td>
+        <td>${l.city || ''}</td>
+        <td><span class="badge">${whoYouAre}</span></td>
+        <td>${l.reference || '-'}</td>
+        <td>
+          <select onchange="updateField('${l.leadid}','category',this.value)">
+            <option value="">Select</option>
+            <option value="Request Call Back" ${l.category === 'Request Call Back' ? 'selected':''}>Request Call Back</option>
+            <option value="Meet Senior Person" ${l.category === 'Meet Senior Person' ? 'selected':''}>Meet Senior Person</option>
+            <option value="Interested in Quote" ${l.category === 'Interested in Quote' ? 'selected':''}>Interested in Quote</option>
+            <option value="Send Product Details" ${l.category === 'Send Product Details' ? 'selected':''}>Send Product Details</option>
+            <option value="Requesting Demo" ${l.category === 'Requesting Demo' ? 'selected':''}>Requesting Demo</option>
+          </select>
+        </td>
+        <td><span class="badge">${l.segment || ''}</span></td>
+        <td>
+          <select onchange="updateField('${l.leadid}','assignto',this.value)">
+            <option value="Unassigned">Unassigned</option>
+            <option value="Onkar" ${l.assignto === 'Onkar' ? 'selected':''}>Onkar</option>
+            <option value="Goraksha" ${l.assignto === 'Goraksha' ? 'selected':''}>Goraksha</option>
+            <option value="Sachin" ${l.assignto === 'Sachin' ? 'selected':''}>Sachin</option>
+            <option value="Rajesh" ${l.assignto === 'Rajesh' ? 'selected':''}>Rajesh</option>
+          </select>
+        </td>
+        <td>
+          <select onchange="updateField('${l.leadid}','status',this.value)">
+            <option value="Lead Collected" ${l.status === 'Lead Collected' ? 'selected':''}>Lead Collected</option>
+            <option value="Assigned" ${l.status === 'Assigned' ? 'selected':''}>Assigned</option>
+            <option value="Qualified" ${l.status === 'Qualified' ? 'selected':''}>Qualified</option>
+            <option value="Converted" ${l.status === 'Converted' ? 'selected':''}>Converted</option>
+          </select>
+        </td>
+        <td>
+          <select onchange="updateField('${l.leadid}','campaignenabled',this.value)">
+            <option value="No" ${l.campaignenabled === 'No' ? 'selected':''}>No</option>
+            <option value="Yes" ${l.campaignenabled === 'Yes' ? 'selected':''}>Yes</option>
+          </select>
+        </td>
+        <td>
+          <button class="btn-danger" onclick="deleteLead('${l.leadid}')" title="Delete lead">
+            Delete
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
 
         function updateField(leadId, field, val) {
   const l = allLeads.find(x => x.leadid === leadId);
@@ -1201,26 +1211,26 @@
 }
 
         function deleteLead(leadId) {
-    if (!confirm('Delete lead?')) return;
-    
-    const idx = allLeads.findIndex(x => x.lead_id === leadId);
-    if (idx === -1) {
-        addDebugLog('Lead not found for ID: ' + leadId, 'error');
-        return;
-    }
-    
-    const phone = allLeads[idx].phone_number;
-    const email = allLeads[idx].email;
-    
-    allLeads.splice(idx, 1);
-    registeredPhones.delete(phone);
-    if (email && email !== '') {
-        registeredEmails.delete(email);
-    }
-    
-    saveData();
-    refreshView();
-    addDebugLog('Lead deleted: ' + leadId, 'success');
+  if (!confirm('Delete lead?')) return;
+
+  const idx = allLeads.findIndex(x => x.leadid === leadId);
+  if (idx === -1) {
+    addDebugLog('Lead not found for ID: ' + leadId, 'error');
+    return;
+  }
+
+  const phone = allLeads[idx].phonenumber;
+  const email = allLeads[idx].email;
+
+  allLeads.splice(idx, 1);
+  registeredPhones.delete(phone);
+  if (email && email !== '') {
+    registeredEmails.delete(email);
+  }
+
+  saveData();
+  refreshView();
+  addDebugLog('Lead deleted ' + leadId, 'success');
 }
 
         function applyFilters() {
@@ -2440,8 +2450,8 @@
                         </select>
                     </td>
                     <td>
-              <button class="btn-danger" onclick="deleteLead('${l.leadid}')" title="Delete lead">
-                🗑️ Delete
+              <button class="btn-danger" onclick="deleteLead('${l.lead_id}')" title="Delete lead">
+                    🗑️ Delete
               </button>
                 </td>
                 </tr>
